@@ -1,0 +1,8 @@
+.streamlit/secrets.toml
+__pycache__/
+*.py[cod]
+*.log
+.venv/
+venv/
+.DS_Store
+.claude/settings.local.json
