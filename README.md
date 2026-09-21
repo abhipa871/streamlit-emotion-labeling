@@ -1,138 +1,69 @@
 # Emotion labeling app
 
-A Streamlit app where a participant labels five randomly sampled messages from
-the Hugging Face dataset [`dair-ai/emotion`](https://huggingface.co/datasets/dair-ai/emotion)
-with one of six emotions. Every label is stored in Supabase under an anonymous
-participant ID, so the database can answer *which participant labeled which
-message with which label*.
+A Streamlit app where a participant labels five random messages from the
+[`dair-ai/emotion`](https://huggingface.co/datasets/dair-ai/emotion) dataset as
+anger, fear, joy, love, sadness, or surprise. Each label is saved to Supabase
+under an anonymous participant ID, so the same person's labels stay grouped.
 
-## Files
-
-| File | Purpose |
-| --- | --- |
-| `app.py` | Entry point: page config, accessibility controls, hidden navigation |
-| `pages/instructions.py` | Task instructions and the participant ID form |
-| `pages/labeling.py` | The five labeling questions |
-| `pages/finished_screen.py` | Confirmation and a summary of the choices |
-| `data_handler.py` | Dataset loading and all Supabase calls |
-| `models.py` | Participant ID validation (`pydantic`) |
-| `shared_functions.py` | Color-blind palette toggle, back-navigation helper |
-| `supabase_setup.sql` | Tables, RLS, and the three RPCs the app calls |
-| `.streamlit/config.toml` | Theme |
-
-## 1. Supabase
-
-The project this app points at (`icltrnnmwefegtleivaz`) is **already set up and
-verified**: all four tables exist, the three RPCs answer with the publishable
-key, and a full test submission was written and confirmed. The publishable key
-has no `select`, `insert`, `update`, or `delete` privilege on any of the four
-tables, so it can only reach the database through the RPCs.
-
-`supabase_setup.sql` is therefore a rebuild script, not a required step. Run it
-when you point the app at a **new** Supabase project, or to re-assert the grants
-on this one. Note that it **drops and recreates** the three functions, so on a
-project where they already work you only need it if something broke. To add just
-the reporting view from section 5, run that section on its own.
-
-To run it: Supabase → **SQL Editor** → **New query** → paste → **Run**, then
-confirm with `select public.emotion_labeling_healthcheck();` → `true`.
-
-The script enables Row Level Security on all four tables with no policies, so
-the publishable (anon) key cannot read or write them directly. Participants
-reach the database only through three `SECURITY DEFINER` functions, which are
-granted to the `anon` role:
-
-| RPC | Called from |
-| --- | --- |
-| `emotion_labeling_healthcheck()` | `pages/instructions.py`, before starting |
-| `start_labeling_submission(p_user_id, p_questions)` | `pages/labeling.py`, on first load |
-| `complete_labeling_submission(p_submission_id, p_responses)` | `pages/labeling.py`, on the last question |
-
-This is why the app uses RPCs instead of `.table(...).insert(...)`: one call
-spans `participants`, `submissions`, `questions`, and `responses`, and stays
-atomic under RLS.
-
-## 2. Run it locally
+## Run locally
 
 ```powershell
 pip install -r requirements.txt
 python -m streamlit run app.py
 ```
 
-Before the first run, create `.streamlit/secrets.toml`:
+First create `.streamlit/secrets.toml` (gitignored — never commit it):
 
 ```toml
 [supabase]
 url = "https://YOUR_PROJECT_REF.supabase.co"
-publishable_key = "YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY"
+publishable_key = "YOUR_SUPABASE_PUBLISHABLE_KEY"
 schema = "public"
 ```
 
-That file is gitignored and must never be committed. The app also reads
-`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SCHEMA` from the
-environment if it is absent.
+The app opens at http://localhost:8501.
 
-## 3. Deploy to Streamlit Community Cloud
+## Deploy to Streamlit Community Cloud
 
-1. Push this folder to a GitHub repository (public or private).
-2. Go to [share.streamlit.io](https://share.streamlit.io) → **Create app** →
-   **Deploy a public app from GitHub**.
-3. Fill in:
-   - **Repository**: your repo
-   - **Branch**: `main`
-   - **Main file path**: `app.py`
-   - **Python version** (under *Advanced settings*): **3.12** or **3.13**
-4. Still under *Advanced settings*, paste into **Secrets**:
+1. [share.streamlit.io](https://share.streamlit.io) → **Create app** → deploy from GitHub.
+2. Branch `main`, main file `app.py`, Python **3.12** or **3.13**.
+3. Under **Advanced settings → Secrets**, paste the same TOML as above.
+4. **Deploy.**
 
-   ```toml
-   [supabase]
-   url = "https://YOUR_PROJECT_REF.supabase.co"
-   publishable_key = "YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY"
-   schema = "public"
-   ```
+Participants just need the app URL — no login, no Supabase account.
 
-5. Click **Deploy**. The first build installs the requirements and the first
-   visit downloads the dataset parquet (~27 MB, cached for 12 hours).
+## Database
 
-Anyone with the app URL can now label messages; no Supabase account or login is
-needed on their side. The theme in `.streamlit/config.toml` is picked up
-automatically.
-
-Secrets can be edited later from the app's ⋮ menu → **Settings** → **Secrets**;
-saving them restarts the app.
-
-## 4. Read the collected data
-
-In the Supabase SQL editor. The `labeling_results` view comes from section 5 of
-`supabase_setup.sql`; until you run that section, use the join it contains.
-
-```sql
--- one row per label, with the dataset's own label for comparison
-select * from public.labeling_results order by submitted_at desc;
-
--- how many completed submissions per anonymous participant
-select user_id, count(*) as submissions
-from public.labeling_results
-where completed
-group by user_id
-order by submissions desc;
+```
+participants → submissions → responses → questions
 ```
 
-## Troubleshooting
+The publishable key has no direct access to these tables. The app writes through
+three Postgres functions: `emotion_labeling_healthcheck`,
+`start_labeling_submission`, and `complete_labeling_submission`.
 
-| Symptom | Cause and fix |
+`supabase_setup.sql` creates all of it — run it in the Supabase SQL editor when
+pointing the app at a new project.
+
+To see the collected labels:
+
+```sql
+select p.user_id, q.question_text, r.selected_emotion, q.correct_emotion
+from public.responses r
+join public.submissions s  on s.submission_id = r.submission_id
+join public.participants p on p.participant_id = s.participant_id
+join public.questions q    on q.question_id = r.question_id
+order by s.submitted_at desc;
+```
+
+## Files
+
+| File | Purpose |
 | --- | --- |
-| "Supabase is not configured…" | Secrets missing or malformed. Check the `[supabase]` section in the app's **Secrets** box (or `.streamlit/secrets.toml` locally). |
-| "The Supabase labeling schema is not available." | `supabase_setup.sql` has not been run on this project, or it was run on a different project than the URL points to. |
-| "Supabase could not process the request…" | The RPCs exist but were rejected — usually missing `grant execute … to anon`. Re-run section 3 and 4 of `supabase_setup.sql`. |
-| "Could not connect to Supabase." | The project is paused (free Supabase projects pause after inactivity) or the URL is wrong. Resume it from the Supabase dashboard. |
-| "Could not download the emotion dataset…" | Transient Hugging Face outage. The loader already retries three times; press **Try again**. |
-| App build fails on Community Cloud | Check the build log for a package that has no wheel for the selected Python version, and switch the app to Python 3.12. |
-
-## Notes on the environment
-
-- Python 3.11–3.13 are supported; Community Cloud does not offer 3.14 yet.
-- The app reads the dataset straight from its parquet file with `pandas`, and
-  keeps a random pool of 20,000 messages in cache, so the heavy `datasets`
-  package is not needed at runtime and memory stays well inside Community
-  Cloud's 1 GB limit.
+| `app.py` | Entry point and navigation |
+| `pages/` | Instructions, labeling, finished screen |
+| `data_handler.py` | Dataset loading and Supabase calls |
+| `models.py` | Participant ID validation |
+| `shared_functions.py` | Color-blind palette toggle, back navigation |
+| `supabase_setup.sql` | Database schema and functions |
+| `.streamlit/config.toml` | Theme |
