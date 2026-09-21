@@ -18,9 +18,7 @@ message with which label*.
 | `models.py` | Participant ID validation (`pydantic`) |
 | `shared_functions.py` | Color-blind palette toggle, back-navigation helper |
 | `supabase_setup.sql` | Tables, RLS, and the three RPCs the app calls |
-| `check_supabase.py` | Command-line check that the database is reachable |
 | `.streamlit/config.toml` | Theme |
-| `.streamlit/secrets.toml.example` | Template for the Supabase credentials |
 
 ## 1. Supabase
 
@@ -58,19 +56,21 @@ atomic under RLS.
 
 ```powershell
 pip install -r requirements.txt
-copy .streamlit\secrets.toml.example .streamlit\secrets.toml
-# then edit .streamlit\secrets.toml with the real project URL and publishable key
 python -m streamlit run app.py
 ```
 
-Check the database connection without opening the browser:
+Before the first run, create `.streamlit/secrets.toml`:
 
-```powershell
-python check_supabase.py           # configuration + health check
-python check_supabase.py --write   # also saves and verifies a test submission
+```toml
+[supabase]
+url = "https://YOUR_PROJECT_REF.supabase.co"
+publishable_key = "YOUR_SUPABASE_PUBLISHABLE_OR_ANON_KEY"
+schema = "public"
 ```
 
-`.streamlit/secrets.toml` is gitignored and must never be committed.
+That file is gitignored and must never be committed. The app also reads
+`SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY`, and `SUPABASE_SCHEMA` from the
+environment if it is absent.
 
 ## 3. Deploy to Streamlit Community Cloud
 

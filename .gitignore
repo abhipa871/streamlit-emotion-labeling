@@ -6,3 +6,6 @@ __pycache__/
 venv/
 .DS_Store
 .claude/settings.local.json
+.mcp.json
+CLAUDE_CODE_HANDOFF.md
+check_supabase.py
