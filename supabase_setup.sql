@@ -4,6 +4,11 @@
 -- New query -> paste -> Run). It is idempotent: it is safe to run on a project
 -- where the tables and functions already exist.
 --
+-- Section 3 DROPS and recreates the three functions. On a project where they
+-- already work you do not need this file at all - it is here to rebuild the
+-- schema on a new project, or to re-assert the grants. Section 5 (the reporting
+-- view) can be run on its own.
+--
 -- What it guarantees:
 --   1. The four tables exist with the expected columns and keys.
 --   2. Row Level Security is on, and anonymous visitors get NO direct table

@@ -22,12 +22,22 @@ message with which label*.
 | `.streamlit/config.toml` | Theme |
 | `.streamlit/secrets.toml.example` | Template for the Supabase credentials |
 
-## 1. Set up Supabase
+## 1. Supabase
 
-1. Open the Supabase project → **SQL Editor** → **New query**.
-2. Paste all of `supabase_setup.sql` and run it. It is idempotent, so running it
-   on a project that already has these tables is safe.
-3. Confirm it worked: `select public.emotion_labeling_healthcheck();` → `true`.
+The project this app points at (`icltrnnmwefegtleivaz`) is **already set up and
+verified**: all four tables exist, the three RPCs answer with the publishable
+key, and a full test submission was written and confirmed. The publishable key
+has no `select`, `insert`, `update`, or `delete` privilege on any of the four
+tables, so it can only reach the database through the RPCs.
+
+`supabase_setup.sql` is therefore a rebuild script, not a required step. Run it
+when you point the app at a **new** Supabase project, or to re-assert the grants
+on this one. Note that it **drops and recreates** the three functions, so on a
+project where they already work you only need it if something broke. To add just
+the reporting view from section 5, run that section on its own.
+
+To run it: Supabase → **SQL Editor** → **New query** → paste → **Run**, then
+confirm with `select public.emotion_labeling_healthcheck();` → `true`.
 
 The script enables Row Level Security on all four tables with no policies, so
 the publishable (anon) key cannot read or write them directly. Participants
@@ -93,7 +103,8 @@ saving them restarts the app.
 
 ## 4. Read the collected data
 
-In the Supabase SQL editor:
+In the Supabase SQL editor. The `labeling_results` view comes from section 5 of
+`supabase_setup.sql`; until you run that section, use the join it contains.
 
 ```sql
 -- one row per label, with the dataset's own label for comparison
